@@ -41,7 +41,8 @@ $RECYCLE.BIN/
 
 # PyInstaller
 *.manifest
-*.spec
+# 保留 build.spec 配置文件
+# *.spec
 
 # Nuitka
 *.build/

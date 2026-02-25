@@ -53,6 +53,9 @@ qq-emoji-manager/
 │   └── path_manager.py    # 路径管理
 ├── data/                   # 数据目录
 ├── main.py                 # 程序入口
+├── build.py                # 统一打包脚本
+├── build.spec              # PyInstaller配置
+├── nuitka-config.cfg       # Nuitka配置
 ├── requirements.txt        # 依赖项
 └── README.md              # 项目说明
 ```
@@ -125,12 +128,41 @@ python main.py
 
 ## 打包发布
 
-### 使用Nuitka打包
+项目提供了统一的打包脚本 `build.py`，支持 PyInstaller 和 Nuitka 两种打包方式。
+
+### 打包命令
+
 ```bash
-python build_nuitka.py
+# 使用 PyInstaller 打包（目录模式，推荐）
+python build.py
+
+# 使用 PyInstaller 打包（单文件模式）
+python build.py --onefile
+
+# 使用 Nuitka 打包（需要安装 C 编译器）
+python build.py --nuitka
+
+# 清理构建产物
+python build.py --clean
+
+# 生成所有打包版本
+python build.py --all
 ```
 
-打包后的文件将位于 `dist/` 目录下。
+### 打包工具对比
+
+| 工具 | 优点 | 缺点 |
+|------|------|------|
+| PyInstaller (目录) | 启动快、兼容性好 | 文件数量多 |
+| PyInstaller (单文件) | 分发方便 | 启动较慢、体积大 |
+| Nuitka | 性能最优、体积小 | 编译时间长、需要C编译器 |
+
+### 打包产物
+
+打包后的文件位于 `dist/` 目录：
+- `dist/QQEmojiManager/` - PyInstaller 目录模式
+- `dist/QQEmojiManager.exe` - PyInstaller 单文件模式
+- `dist/nuitka/` - Nuitka 打包结果
 
 ## 技术栈
 
