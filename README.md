@@ -169,11 +169,9 @@ python build.py --all
 - **GUI框架**: PyQt5 >= 5.15.0
 - **图像处理**: Pillow >= 9.0.0
 - **Windows API**: pywin32 >= 300
-- **OCR识别**: pytesseract >= 0.3.10（可选）
 
 ## 开发计划
 
-- [ ] 支持更多表情格式
 - [ ] 添加表情搜索功能
 - [ ] 支持云端备份
 - [ ] 添加表情编辑功能
@@ -202,7 +200,7 @@ python build.py --all
 
 如有问题或建议，欢迎通过以下方式联系：
 - 提交 GitHub Issue
-- 发送邮件至 [your-email@example.com]
+- 发送邮件至 [1269814800@qq.com]
 
 ---
 
