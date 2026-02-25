@@ -735,20 +735,6 @@ class FavoriteEmojiPage(QWidget):
         thumb_layout.addWidget(thumb_btn)
         config_card.layout.addLayout(thumb_layout)
 
-        # 输出目录
-        output_layout = QHBoxLayout()
-        output_layout.setSpacing(12)
-        output_layout.addWidget(QLabel("输出目录:"))
-        self.output_input = ModernLineEdit()
-        default_output = str(path_manager.paths.favorite_output_dir)
-        self.output_input.setText(default_output)
-        output_layout.addWidget(self.output_input, 1)
-        output_btn = QPushButton("📁 浏览")
-        output_btn.setObjectName("secondary_btn")
-        output_btn.clicked.connect(self.browse_output_dir)
-        output_layout.addWidget(output_btn)
-        config_card.layout.addLayout(output_layout)
-
         # 命名规则
         naming_layout = QHBoxLayout()
         naming_layout.setSpacing(12)
@@ -835,16 +821,13 @@ class FavoriteEmojiPage(QWidget):
         """开始整理（后台线程）"""
         source_path = self.source_input.text()
         thumb_path = self.thumb_input.text().strip() or None
-        output_path = self.output_input.text()
+        output_path = path_manager.paths.favorite_output_dir
         prefix = self.prefix_input.text()
         start_num_text = self.start_num_input.text()
         filter_by_thumb = self.filter_checkbox.isChecked()
 
         if not source_path:
             QMessageBox.warning(self, "提示", "请选择源目录(Ori)")
-            return
-        if not output_path:
-            QMessageBox.warning(self, "提示", "请选择输出目录")
             return
         if not prefix:
             QMessageBox.warning(self, "提示", "请输入文件名前缀")
@@ -954,11 +937,6 @@ class FavoriteEmojiPage(QWidget):
                 thumb_candidate = source_obj.parent / "Thumb"
                 if thumb_candidate.exists():
                     self.thumb_input.setText(str(thumb_candidate))
-
-    def browse_output_dir(self):
-        path = QFileDialog.getExistingDirectory(self, "选择输出目录")
-        if path:
-            self.output_input.setText(path)
 
 
 class ConvertPage(QWidget):
