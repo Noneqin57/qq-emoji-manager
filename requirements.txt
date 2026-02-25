@@ -1,0 +1,13 @@
+# QQ表情包智能管家 - 依赖项
+
+# GUI框架
+PyQt5>=5.15.0
+
+# 图像处理
+Pillow>=9.0.0
+
+# Windows API（仅Windows）
+pywin32>=300;sys_platform=='win32'
+
+# OCR文字识别（可选）
+pytesseract>=0.3.10

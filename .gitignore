@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Nuitka
+*.build/
+*.onefile-build/
+*.dist/
+.nuitka_cache/
+
+# Application Data
+data/*.db
+data/*.log
+data/path_config.json
+
+# Test results
+result/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Backup
+backup_*/
+
+# Logs
+*.log
+
+# Local configuration
+.env
+.env.local
+
+# OS
+.DS_Store
