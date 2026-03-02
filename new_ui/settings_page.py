@@ -15,12 +15,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QFont
-from PIL import Image
-import io
 
-# 导入路径管理器
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from utils.path_manager import path_manager
+from utils.path_manager import path_manager, detect_thumb_dir
 from utils.logger import get_logger
 
 logger = get_logger("settings_page")
@@ -65,6 +61,12 @@ class SettingsPage(QWidget):
 
         # LRU 图片缓存
         self.image_cache = LRUCache(max_size=100)
+
+        # 预览加载工作线程
+        self._preview_worker = None
+        self._current_img_labels = []
+        self._uncached_indices = []
+        self._uncached_files = []
 
         # 分页状态
         self._market_files = []
@@ -409,17 +411,16 @@ class SettingsPage(QWidget):
         favorite_emoji = paths.get("favorite_emoji", "")
         if favorite_emoji:
             self.favorite_path_input.setText(favorite_emoji)
-            # 自动检测并填充 Thumb 目录
-            favorite_obj = Path(favorite_emoji)
-            if favorite_obj.name.upper() == "ORI":
-                thumb_candidate = favorite_obj.parent / "Thumb"
-                if thumb_candidate.exists():
-                    self.thumb_path_input.setText(str(thumb_candidate))
-        
-        # 如果路径管理器中有 Thumb 路径，优先使用
-        favorite_thumb = paths.get("favorite_thumb", "")
-        if favorite_thumb and Path(favorite_thumb).exists():
-            self.thumb_path_input.setText(favorite_thumb)
+            # 自动检测 Thumb 目录（如果路径管理器中没有保存）
+            favorite_thumb = paths.get("favorite_thumb", "")
+            resolved_thumb = detect_thumb_dir(favorite_emoji, favorite_thumb)
+            if resolved_thumb:
+                self.thumb_path_input.setText(resolved_thumb)
+        else:
+            # 如果路径管理器中单独有 Thumb 路径
+            favorite_thumb = paths.get("favorite_thumb", "")
+            if favorite_thumb and Path(favorite_thumb).exists():
+                self.thumb_path_input.setText(favorite_thumb)
 
         # 检查是否需要提示自动检测
         has_any_path = bool(market_emoji or favorite_emoji)
@@ -467,13 +468,10 @@ class SettingsPage(QWidget):
         path = QFileDialog.getExistingDirectory(self, "选择收藏表情目录(Ori)")
         if path:
             self.favorite_path_input.setText(path)
-            # 自动检测并填充 Thumb 目录
-            path_obj = Path(path)
-            if path_obj.name.upper() == "ORI":
-                thumb_candidate = path_obj.parent / "Thumb"
-                if thumb_candidate.exists():
-                    self.thumb_path_input.setText(str(thumb_candidate))
-                    logger.info("自动检测到 Thumb 目录: %s", thumb_candidate)
+            resolved_thumb = detect_thumb_dir(path)
+            if resolved_thumb:
+                self.thumb_path_input.setText(resolved_thumb)
+                logger.info("自动检测到 Thumb 目录: %s", resolved_thumb)
 
     def load_preview(self):
         """加载预览"""
@@ -498,11 +496,10 @@ class SettingsPage(QWidget):
         if favorite_path and Path(favorite_path).exists():
             if filter_favorites and thumb_path and Path(thumb_path).exists():
                 # 使用 Thumb 目录筛选
+                all_ori_files = self._scan_emoji_files(favorite_path)
                 self._favorite_files = self._scan_and_filter_favorites(favorite_path, thumb_path)
-                logger.info("使用 Thumb 筛选: Ori=%d, Thumb=%d, 匹配=%d",
-                           len(self._scan_emoji_files(favorite_path)),
-                           len(list(Path(thumb_path).glob("*.png"))),
-                           len(self._favorite_files))
+                logger.info("使用 Thumb 筛选: Ori=%d, 匹配=%d",
+                           len(all_ori_files), len(self._favorite_files))
             else:
                 # 不筛选
                 self._favorite_files = self._scan_emoji_files(favorite_path)
@@ -555,8 +552,9 @@ class SettingsPage(QWidget):
         return sorted(set(emoji_files))
 
     def _render_page(self, scroll_area, all_files, page):
-        """渲染指定页"""
+        """渲染指定页（异步加载缩略图，避免阻塞 UI）"""
         self._clear_grid(scroll_area)
+        self._stop_preview_worker()
 
         start = page * ITEMS_PER_PAGE
         end = min(start + ITEMS_PER_PAGE, len(all_files))
@@ -570,80 +568,80 @@ class SettingsPage(QWidget):
         grid = container.layout()
         thumb_size = 90
 
+        # 创建占位框架，缓存命中的直接显示
+        self._current_img_labels = []
+        uncached_files = []
+        uncached_indices = []
+
         for idx, emoji_path in enumerate(page_files):
-            try:
-                frame = self._create_emoji_frame(emoji_path, thumb_size)
-                if frame:
-                    row = idx // COLUMNS
-                    col = idx % COLUMNS
-                    grid.addWidget(frame, row, col, alignment=Qt.AlignCenter)
-            except Exception as e:
-                logger.error("加载表情失败 %s: %s", emoji_path, e)
+            frame = QFrame()
+            frame.setObjectName("emoji_frame")
+            frame.setFixedSize(thumb_size + 16, thumb_size + 40)
+
+            fl = QVBoxLayout(frame)
+            fl.setContentsMargins(4, 4, 4, 4)
+            fl.setSpacing(4)
+
+            img_label = QLabel()
+            img_label.setFixedSize(thumb_size, thumb_size)
+            img_label.setAlignment(Qt.AlignCenter)
+
+            # 缓存命中则直接显示，否则占位
+            cached = self.image_cache.get(str(emoji_path))
+            if cached is not None:
+                img_label.setPixmap(cached)
+            else:
+                img_label.setText("...")
+                uncached_files.append(emoji_path)
+                uncached_indices.append(idx)
+
+            fl.addWidget(img_label)
+
+            name = emoji_path.stem
+            if len(name) > 10:
+                name = name[:10] + "..."
+            name_label = QLabel(name)
+            name_label.setStyleSheet("font-size: 10px;")
+            name_label.setAlignment(Qt.AlignCenter)
+            fl.addWidget(name_label)
+
+            row = idx // COLUMNS
+            col = idx % COLUMNS
+            grid.addWidget(frame, row, col, alignment=Qt.AlignCenter)
+            self._current_img_labels.append(img_label)
 
         for i in range(COLUMNS):
             grid.setColumnStretch(i, 1)
 
-    def _create_emoji_frame(self, emoji_path, size):
-        """创建表情框架"""
-        frame = QFrame()
-        frame.setObjectName("emoji_frame")
-        frame.setFixedSize(size + 16, size + 40)
+        # 异步加载未缓存的缩略图
+        if uncached_files:
+            from .workers import PreviewLoadWorker
+            self._uncached_indices = uncached_indices
+            self._uncached_files = uncached_files
+            self._preview_worker = PreviewLoadWorker(uncached_files, size=thumb_size)
+            self._preview_worker.preview_ready.connect(self._on_preview_ready)
+            self._preview_worker.start()
 
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+    def _on_preview_ready(self, worker_index, pixmap, filename):
+        """异步缩略图加载完成回调"""
+        if worker_index >= len(self._uncached_indices):
+            return
+        label_index = self._uncached_indices[worker_index]
+        if label_index >= len(self._current_img_labels):
+            return
+        label = self._current_img_labels[label_index]
+        if not pixmap.isNull():
+            label.setPixmap(pixmap)
+            # 用完整路径作为缓存 key
+            if worker_index < len(self._uncached_files):
+                self.image_cache.put(str(self._uncached_files[worker_index]), pixmap)
 
-        # 图片标签
-        img_label = QLabel()
-        img_label.setFixedSize(size, size)
-        img_label.setAlignment(Qt.AlignCenter)
-
-        # 加载图片
-        pixmap = self._load_thumbnail(emoji_path, size)
-        if pixmap:
-            img_label.setPixmap(pixmap)
-        else:
-            img_label.setText("📷")
-
-        layout.addWidget(img_label)
-
-        # 文件名标签
-        name = emoji_path.stem
-        if len(name) > 10:
-            name = name[:10] + "..."
-
-        name_label = QLabel(name)
-        name_label.setStyleSheet("font-size: 10px;")
-        name_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(name_label)
-
-        return frame
-
-    def _load_thumbnail(self, image_path, size):
-        """加载缩略图（使用 LRU 缓存）"""
-        cache_key = str(image_path)
-
-        cached = self.image_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        try:
-            with Image.open(image_path) as img:
-                if img.mode != 'RGBA':
-                    img = img.convert('RGBA')
-
-                img.thumbnail((size, size), Image.Resampling.LANCZOS)
-
-                buffer = io.BytesIO()
-                img.save(buffer, format='PNG')
-                pixmap = QPixmap()
-                pixmap.loadFromData(buffer.getvalue())
-
-                self.image_cache.put(cache_key, pixmap)
-                return pixmap
-        except Exception as e:
-            logger.error("加载缩略图失败 %s: %s", image_path, e)
-            return None
+    def _stop_preview_worker(self):
+        """停止正在运行的预览加载线程"""
+        if self._preview_worker and self._preview_worker.isRunning():
+            self._preview_worker.cancel()
+            self._preview_worker.wait()
+        self._preview_worker = None
 
     def _clear_grid(self, scroll_area):
         """清空网格"""

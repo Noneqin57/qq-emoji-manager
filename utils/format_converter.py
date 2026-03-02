@@ -135,7 +135,6 @@ class WeChatEmojiConverter:
         
         # 处理重名
         counter = 1
-        original_path = output_path
         while output_path.exists():
             output_path = self.output_dir / f"{output_name}_{counter}.{ext}"
             counter += 1
@@ -176,7 +175,6 @@ class WeChatEmojiConverter:
         
         # 处理重名
         counter = 1
-        original_path = output_path
         while output_path.exists():
             output_path = self.output_dir / f"{output_name}_{counter}.gif"
             counter += 1

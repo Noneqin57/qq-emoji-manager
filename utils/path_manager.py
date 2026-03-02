@@ -18,6 +18,26 @@ from utils.logger import get_logger
 logger = get_logger("path_manager")
 
 
+def detect_thumb_dir(ori_path: str, thumb_dir: str = None) -> Optional[str]:
+    """
+    从 Ori 路径自动检测 Thumb 目录
+
+    Args:
+        ori_path: 收藏表情 Ori 目录路径
+        thumb_dir: 已知的 Thumb 目录路径（优先使用）
+
+    Returns:
+        Thumb 目录路径，未检测到返回 None
+    """
+    if thumb_dir and Path(thumb_dir).exists():
+        return thumb_dir
+    path_obj = Path(ori_path)
+    if path_obj.name.upper() == "ORI":
+        thumb_candidate = path_obj.parent / "Thumb"
+        if thumb_candidate.exists():
+            return str(thumb_candidate)
+    return None
+
 def get_app_data_dir() -> Path:
     """
     获取应用程序数据目录
@@ -94,8 +114,13 @@ class PathManager:
         # 项目根目录（用于开发环境）
         self.project_root = Path(__file__).parent.parent
 
-        # 默认输出目录（使用用户数据目录）
-        self.default_output_dir = self.app_data_dir / "result"
+        # 默认输出目录
+        if getattr(sys, 'frozen', False):
+            # 打包环境 - 使用exe所在目录
+            self.default_output_dir = Path(sys.executable).parent / "result"
+        else:
+            # 开发环境 - 使用项目目录
+            self.default_output_dir = self.app_data_dir / "result"
 
         # 配置文件路径（放在用户数据目录）
         self.config_file = self.app_data_dir / "data" / "path_config.json"

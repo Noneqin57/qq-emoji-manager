@@ -4,7 +4,6 @@
 采用侧边栏导航 + 卡片式布局
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -31,13 +30,11 @@ from utils.logger import get_logger
 
 logger = get_logger("main_window")
 
-# 导入核心模块
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.qq_path_detector import QQPathDetector
 from core.market_emoji import MarketEmojiClassifier
 from core.favorite_emoji import FavoriteEmojiClassifier
 from utils.format_converter import WeChatEmojiConverter
-from utils.path_manager import path_manager
+from utils.path_manager import path_manager, detect_thumb_dir
 
 
 class ModernMainWindow(QMainWindow):
@@ -198,21 +195,14 @@ class ModernMainWindow(QMainWindow):
 
     def set_favorite_path(self, emoji_dir: str, thumb_dir: str = None):
         """设置收藏表情路径"""
+        # 自动检测 Thumb 目录
+        resolved_thumb = detect_thumb_dir(emoji_dir, thumb_dir) if emoji_dir else None
+
         favorite_page = self.pages.get("favorite")
         if favorite_page:
             favorite_page.source_input.setText(emoji_dir)
-
-            # 自动检测并填充 Thumb 目录
-            if emoji_dir:
-                source_obj = Path(emoji_dir)
-                if source_obj.name.upper() == "ORI":
-                    # 优先使用传入的 thumb_dir，否则自动检测
-                    if thumb_dir and Path(thumb_dir).exists():
-                        favorite_page.thumb_input.setText(thumb_dir)
-                    else:
-                        thumb_candidate = source_obj.parent / "Thumb"
-                        if thumb_candidate.exists():
-                            favorite_page.thumb_input.setText(str(thumb_candidate))
+            if resolved_thumb:
+                favorite_page.thumb_input.setText(resolved_thumb)
 
         # 同时更新路径管理器
         if emoji_dir:
@@ -226,17 +216,8 @@ class ModernMainWindow(QMainWindow):
         if settings_page:
             if emoji_dir:
                 settings_page.favorite_path_input.setText(emoji_dir)
-            # 自动检测并填充 Thumb 目录到设置页面
-            if emoji_dir:
-                source_obj = Path(emoji_dir)
-                if source_obj.name.upper() == "ORI":
-                    # 优先使用传入的 thumb_dir，否则自动检测
-                    if thumb_dir and Path(thumb_dir).exists():
-                        settings_page.thumb_path_input.setText(thumb_dir)
-                    else:
-                        thumb_candidate = source_obj.parent / "Thumb"
-                        if thumb_candidate.exists():
-                            settings_page.thumb_path_input.setText(str(thumb_candidate))
+            if resolved_thumb:
+                settings_page.thumb_path_input.setText(resolved_thumb)
 
     def auto_detect_and_fill_paths(self):
         """自动检测并填充所有路径"""
@@ -931,12 +912,9 @@ class FavoriteEmojiPage(QWidget):
         path = QFileDialog.getExistingDirectory(self, "选择源目录(Ori)")
         if path:
             self.source_input.setText(path)
-            # 自动检测并填充 Thumb 目录
-            source_obj = Path(path)
-            if source_obj.name.upper() == "ORI":
-                thumb_candidate = source_obj.parent / "Thumb"
-                if thumb_candidate.exists():
-                    self.thumb_input.setText(str(thumb_candidate))
+            resolved_thumb = detect_thumb_dir(path)
+            if resolved_thumb:
+                self.thumb_input.setText(resolved_thumb)
 
 
 class ConvertPage(QWidget):
