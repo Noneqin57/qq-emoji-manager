@@ -7,7 +7,6 @@
 
 import json
 import shutil
-import threading
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Callable, Set
@@ -51,9 +50,6 @@ class MarketEmojiClassifier:
         
         # 专辑ID -> 专辑信息
         self.albums: Dict[str, dict] = {}
-        
-        # 线程锁，保护并发操作
-        self._lock = threading.Lock()
         
     def load_json_data(self) -> bool:
         """
@@ -222,8 +218,7 @@ class MarketEmojiClassifier:
             'unmatched': 0
         }
         
-        # 使用集合跟踪已使用的文件名，避免重名检查时的竞态条件
-        # 使用线程锁保护并发操作
+        # 使用集合跟踪已使用的文件名，避免重名
         used_names: Set[str] = set()
         
         for i, emoji in enumerate(self.emoji_list):
@@ -249,35 +244,29 @@ class MarketEmojiClassifier:
                 new_name = f"{final_name}{emoji.file_path.suffix}"
                 dest_path = market_dir / new_name
                 
-                # 处理重名 - 使用线程锁保护集合操作，避免竞态条件
-                with self._lock:
-                    counter = 1
-                    while new_name in used_names or dest_path.exists():
-                        # 添加唯一标识符避免竞态条件
-                        unique_id = str(uuid.uuid4())[:8]
-                        new_name = f"{final_name}_{counter}_{unique_id}{emoji.file_path.suffix}"
-                        dest_path = market_dir / new_name
-                        counter += 1
-                        # 防止无限循环
-                        if counter > 1000:
-                            raise RuntimeError(f"无法为文件生成唯一名称: {final_name}")
-                    
-                    # 记录已使用的名称（在锁内）
-                    used_names.add(new_name)
+                # 处理重名
+                counter = 1
+                while new_name in used_names or dest_path.exists():
+                    unique_id = str(uuid.uuid4())[:8]
+                    new_name = f"{final_name}_{counter}_{unique_id}{emoji.file_path.suffix}"
+                    dest_path = market_dir / new_name
+                    counter += 1
+                    if counter > 1000:
+                        raise RuntimeError(f"无法为文件生成唯一名称: {final_name}")
+                
+                used_names.add(new_name)
                 
                 # 复制文件
                 shutil.copy2(emoji.file_path, dest_path)
                 
-                # 更新统计信息（需要锁保护）
-                with self._lock:
-                    result['success'] += 1
-                    if emoji.album_name:
-                        if emoji.album_name not in result['albums']:
-                            result['albums'][emoji.album_name] = 0
-                        result['albums'][emoji.album_name] += 1
-                    
-                    if emoji.emoji_id not in self.name_mapping:
-                        result['unmatched'] += 1
+                result['success'] += 1
+                if emoji.album_name:
+                    if emoji.album_name not in result['albums']:
+                        result['albums'][emoji.album_name] = 0
+                    result['albums'][emoji.album_name] += 1
+                
+                if emoji.emoji_id not in self.name_mapping:
+                    result['unmatched'] += 1
                 
             except (OSError, RuntimeError) as e:
                 logger.error("处理表情失败 %s: %s", emoji.file_path, e)

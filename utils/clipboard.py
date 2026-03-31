@@ -58,12 +58,16 @@ def copy_image_to_clipboard(image_path: Path) -> bool:
             dib_data = data[14:]
         
         # 打开剪贴板并设置数据
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.SetClipboardData(CF_DIB, dib_data)
-        win32clipboard.CloseClipboard()
-        
-        return True
+        try:
+            win32clipboard.OpenClipboard()
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(CF_DIB, dib_data)
+            return True
+        finally:
+            try:
+                win32clipboard.CloseClipboard()
+            except Exception:
+                pass
 
     except (OSError, Image.UnidentifiedImageError) as e:
         logger.error("复制到剪贴板失败: %s", e)
@@ -119,21 +123,25 @@ def get_clipboard_image() -> Optional[Image.Image]:
     try:
         win32clipboard.OpenClipboard()
         
-        # 检查是否有DIB数据
-        if win32clipboard.IsClipboardFormatAvailable(CF_DIB):
-            dib_data = win32clipboard.GetClipboardData(CF_DIB)
-            win32clipboard.CloseClipboard()
+        try:
+            # 检查是否有DIB数据
+            if win32clipboard.IsClipboardFormatAvailable(CF_DIB):
+                dib_data = win32clipboard.GetClipboardData(CF_DIB)
+                
+                # 添加BMP文件头
+                bmp_header = b'BM' + (len(dib_data) + 14).to_bytes(4, 'little') + b'\x00\x00\x00\x00' + (14).to_bytes(4, 'little')
+                bmp_data = bmp_header + dib_data
+                
+                # 从内存加载图片
+                image = Image.open(io.BytesIO(bmp_data))
+                return image
             
-            # 添加BMP文件头
-            bmp_header = b'BM' + (len(dib_data) + 14).to_bytes(4, 'little') + b'\x00\x00\x00\x00' + (14).to_bytes(4, 'little')
-            bmp_data = bmp_header + dib_data
-            
-            # 从内存加载图片
-            image = Image.open(io.BytesIO(bmp_data))
-            return image
-        
-        win32clipboard.CloseClipboard()
-        return None
+            return None
+        finally:
+            try:
+                win32clipboard.CloseClipboard()
+            except Exception:
+                pass
         
     except (OSError, ValueError) as e:
         logger.error("从剪贴板获取图片失败: %s", e)

@@ -17,34 +17,9 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from contextlib import contextmanager
 from utils.logger import get_logger
+from utils.path_manager import get_app_data_dir
 
 logger = get_logger("database")
-
-
-def get_app_data_dir() -> Path:
-    """
-    获取应用程序数据目录
-    支持开发环境和打包环境
-    
-    Returns:
-        应用程序数据目录路径
-    """
-    if getattr(sys, 'frozen', False):
-        # 打包环境（Nuitka/PyInstaller）
-        # 使用用户数据目录，避免单文件模式的只读限制
-        if sys.platform == 'win32':
-            app_data = Path(os.environ.get('APPDATA', Path.home() / 'AppData/Roaming'))
-        else:
-            app_data = Path.home() / '.config'
-        
-        app_dir = app_data / 'QQ表情包管理器'
-    else:
-        # 开发环境 - 使用项目目录
-        app_dir = Path(__file__).parent.parent
-    
-    # 确保目录存在
-    app_dir.mkdir(parents=True, exist_ok=True)
-    return app_dir
 
 
 def get_default_db_path() -> Path:
@@ -104,6 +79,9 @@ class EmojiDatabase:
     # 连接超时时间（秒）
     CONNECTION_TIMEOUT = 30
 
+    # 数据库版本号
+    DB_VERSION = 1
+
     def __init__(self, db_path: Path = None):
         """
         初始化数据库
@@ -130,7 +108,7 @@ class EmojiDatabase:
             conn = sqlite3.connect(
                 self.db_path, 
                 timeout=self.CONNECTION_TIMEOUT,
-                isolation_level=None  # 自动提交模式，手动控制事务
+                isolation_level="DEFERRED"  # 使用默认事务模式，配合手动 BEGIN/COMMIT
             )
             conn.row_factory = sqlite3.Row
             yield conn
@@ -142,7 +120,7 @@ class EmojiDatabase:
                 conn.close()
     
     def _init_database(self):
-        """初始化数据库表结构"""
+        """初始化数据库表结构并执行迁移"""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -172,11 +150,41 @@ class EmojiDatabase:
                     CREATE INDEX IF NOT EXISTS idx_category ON emojis(category)
                 """)
                 
+                # 执行数据库迁移
+                self._migrate_database(cursor)
+                
                 conn.commit()
                 logger.info("数据库初始化成功: %s", self.db_path)
         except sqlite3.Error as e:
             logger.error("初始化数据库失败: %s", e)
             raise DatabaseError(f"初始化数据库失败: {e}") from e
+    
+    def _migrate_database(self, cursor):
+        """
+        数据库迁移逻辑
+        
+        Args:
+            cursor: 数据库游标
+        """
+        # 检查当前版本
+        cursor.execute("PRAGMA user_version")
+        current_version = cursor.fetchone()[0]
+        
+        if current_version >= self.DB_VERSION:
+            return
+        
+        # 迁移: v0 -> v1
+        if current_version < 1:
+            # 确保表结构完整（如果表已存在但缺少字段）
+            try:
+                cursor.execute("SELECT tags FROM emojis LIMIT 0")
+            except sqlite3.OperationalError:
+                cursor.execute("ALTER TABLE emojis ADD COLUMN tags TEXT DEFAULT ''")
+                logger.info("数据库迁移: 添加 tags 字段")
+        
+        # 设置当前版本
+        cursor.execute(f"PRAGMA user_version = {self.DB_VERSION}")
+        logger.info("数据库迁移完成: v%d -> v%d", current_version, self.DB_VERSION)
     
     def add_emoji(self, record: EmojiRecord) -> int:
         """
@@ -501,7 +509,7 @@ class EmojiDatabase:
             
             logger.info("导出数据成功: path=%s, count=%d", output_path, len(records))
             return True
-        except (OSError, json.JSONEncodeError) as e:
+        except (OSError, TypeError) as e:
             logger.error("导出数据失败: %s", e)
             raise DatabaseError(f"导出数据失败: {e}") from e
     

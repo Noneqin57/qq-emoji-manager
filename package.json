@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@tauri-apps/cli": "^2.10.1"
+  }
+}

@@ -192,6 +192,29 @@ class PathManager:
             except OSError as e:
                 logger.error("保存配置失败: %s", e)
                 return False
+
+    def set_market_paths(self, json_dir: str, emoji_dir: str) -> None:
+        """设置市场表情路径"""
+        if json_dir:
+            self.paths.market_json_dir = json_dir
+        if emoji_dir:
+            self.paths.market_emoji_dir = emoji_dir
+        self.save_config()
+
+    def set_favorite_paths(self, emoji_dir: str, thumb_dir: Optional[str] = None) -> None:
+        """设置收藏表情路径"""
+        if emoji_dir:
+            self.paths.favorite_emoji_dir = emoji_dir
+        if thumb_dir:
+            self.paths.favorite_thumb_dir = thumb_dir
+        self.save_config()
+
+    def set_tencent_files_path(self, tencent_path: str, qq_account: str) -> None:
+        """设置Tencent Files路径和QQ账号"""
+        self.paths.tencent_files_path = tencent_path
+        self.paths.qq_account = qq_account
+        self.paths.auto_detected = True
+        self.save_config()
     
     def auto_detect_from_tencent_files(self, tencent_files_path: Optional[str] = None) -> bool:
         """

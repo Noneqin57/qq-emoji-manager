@@ -11,3 +11,7 @@ pywin32>=300;sys_platform=='win32'
 
 # OCR文字识别（可选）
 pytesseract>=0.3.10
+
+# 测试依赖
+pytest>=7.0.0
+pytest-cov>=4.0.0

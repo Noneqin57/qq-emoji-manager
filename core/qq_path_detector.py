@@ -32,17 +32,8 @@ def validate_path(path: Path, base_dir: Path = None) -> bool:
         路径是否安全有效
     """
     try:
-        # 首先检查原始路径字符串中的危险模式
-        original_path_str = str(path)
-        dangerous_patterns = ['..', '~', '$']
-        for pattern in dangerous_patterns:
-            if pattern in original_path_str:
-                logger.warning("路径包含危险模式: %s", path)
-                return False
-        
         resolved = path.resolve()
         
-        # 如果提供了基准目录，检查路径是否在基准目录内
         if base_dir:
             base_resolved = base_dir.resolve()
             try:

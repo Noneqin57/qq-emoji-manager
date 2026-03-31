@@ -35,14 +35,16 @@ if is_frozen:
         if qt_bin_path.exists():
             os.environ['PATH'] = str(qt_bin_path) + os.pathsep + os.environ.get('PATH', '')
 else:
-    # 开发环境：设置Qt平台插件路径
-    venv_path = Path(sys.executable).parent.parent
-    qt_plugin_paths = [
-        venv_path / "Lib" / "site-packages" / "PyQt5" / "Qt5" / "plugins",
-        venv_path / "lib" / "site-packages" / "PyQt5" / "Qt5" / "plugins",
+    # 开发环境：尝试设置Qt平台插件路径
+    site_packages_candidates = [
+        Path(sys.executable).parent / "Lib" / "site-packages",
+        Path(sys.executable).parent / "lib" / "site-packages",
+        Path(sys.executable).parent.parent / "Lib" / "site-packages",
+        Path(sys.executable).parent.parent / "lib" / "site-packages",
     ]
     
-    for plugin_path in qt_plugin_paths:
+    for sp in site_packages_candidates:
+        plugin_path = sp / "PyQt5" / "Qt5" / "plugins"
         if plugin_path.exists():
             os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = str(plugin_path)
             break
@@ -74,7 +76,7 @@ def main():
             from PyQt5.QtWidgets import QApplication, QMessageBox
             app = QApplication(sys.argv)
             QMessageBox.critical(None, "启动错误", f"程序启动失败:\n{e}")
-        except:
+        except Exception:
             pass
         
         sys.exit(1)

@@ -196,22 +196,30 @@ class WeChatEmojiConverter:
         try:
             with Image.open(input_path) as gif:
                 frames = []
+                frame_durations = []
+                base_duration = gif.info.get('duration', 100)
                 
-                # 处理每一帧
                 for frame_num in range(getattr(gif, 'n_frames', 1)):
                     gif.seek(frame_num)
                     frame = gif.copy()
                     
-                    # 调整尺寸
+                    # 保留 disposal 和 transparency 信息
+                    disposal = gif.info.get('disposal', 2)
+                    transparency = gif.info.get('transparency')
+                    
+                    frame_durations.append(gif.info.get('duration', base_duration))
                     frame = self._resize_for_wechat(frame)
                     
-                    # 转换为P模式（调色板）以减小文件大小
                     if frame.mode != 'P':
                         frame = frame.convert('P', palette=Image.ADAPTIVE, colors=128)
                     
+                    # 恢复透明度信息
+                    if transparency is not None:
+                        frame.info['transparency'] = transparency
+                    frame.info['disposal'] = disposal
+                    
                     frames.append(frame)
                 
-                # 保存GIF
                 if frames:
                     frames[0].save(
                         output_path,
@@ -219,7 +227,8 @@ class WeChatEmojiConverter:
                         save_all=True,
                         append_images=frames[1:],
                         loop=0,
-                        optimize=True
+                        optimize=True,
+                        duration=frame_durations
                     )
         except (OSError, ValueError) as e:
             logger.error("处理GIF失败: %s", e)

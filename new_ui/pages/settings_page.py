@@ -615,7 +615,7 @@ class SettingsPage(QWidget):
 
         # 异步加载未缓存的缩略图
         if uncached_files:
-            from .workers import PreviewLoadWorker
+            from ..workers import PreviewLoadWorker
             self._uncached_indices = uncached_indices
             self._uncached_files = uncached_files
             self._preview_worker = PreviewLoadWorker(uncached_files, size=thumb_size)
